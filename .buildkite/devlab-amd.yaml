@@ -1,0 +1,23 @@
+# DevLab hello world (amd-rocm/devlab). Checks that the pipeline uploads this
+# file and that jobs reach the CPU and gfx1201 queues.
+#
+# Upload with: buildkite-agent pipeline upload .buildkite/devlab-amd.yaml
+steps:
+  - label: ":amd: (CPU) Hello world"
+    agents:
+      queue: amd-cpu
+    timeout_in_minutes: 5
+    command: |
+      echo "Hello world from $$(hostname)"
+      uname -a
+
+  - label: ":amd: (gfx1201) Hello world"
+    agents:
+      queue: amd_gfx1201
+    timeout_in_minutes: 10
+    command: |
+      echo "Hello world from $$(hostname)"
+      uname -a
+      ls -l /dev/kfd /dev/dri || echo "no GPU device nodes"
+      if command -v rocminfo >/dev/null; then rocminfo | grep -m1 -o 'gfx1[0-9]*' || true; else echo "rocminfo not installed"; fi
+      if command -v docker >/dev/null; then docker --version; else echo "docker not installed"; fi
