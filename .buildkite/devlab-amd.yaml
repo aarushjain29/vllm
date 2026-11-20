@@ -1,0 +1,45 @@
+# DevLab gfx1201 (Navi4) mirror of the DGX Spark GPQA Eval (GPT-OSS) job
+# (amd-rocm/devlab).
+#
+# DevLab Dispatch gives each job a fresh VM with Docker, so this is a plain
+# `docker run` step. It tests the ROCm nightly image, which is compiled for
+# every arch, with the tests from the commit that image was built from.
+# GPT-OSS's MXFP4 MoE runs on RDNA through the Triton W4A16 path.
+#
+# Upload with: buildkite-agent pipeline upload .buildkite/devlab-amd.yaml
+steps:
+  - label: ":amd: (gfx1201) GPQA Eval (GPT-OSS)"
+    agents:
+      queue: amd_gfx1201
+    timeout_in_minutes: 90
+    command: |
+      set -euo pipefail
+      hostname
+      image=vllm/vllm-openai-rocm:nightly-rocm100
+      docker pull -q "$$image"
+      ver=$$(docker run --rm --entrypoint python3 "$$image" -c 'import vllm; print(vllm.__version__)')
+      short=$${ver##*+g}; short=$${short%%.*}
+      sha=$$(curl -fsSL -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/vllm-project/vllm/commits/$$short")
+      echo "Testing vllm $$ver (commit $$sha)"
+      git fetch -q --depth=1 https://github.com/vllm-project/vllm.git "$$sha"
+      rm -rf .devlab-src && mkdir .devlab-src
+      git archive FETCH_HEAD tests requirements pyproject.toml | tar -x -C .devlab-src
+      mounts=()
+      for f in /etc/pip.conf /etc/uv/uv.toml; do
+        if [ -f "$$f" ]; then mounts+=(-v "$$f:$$f:ro"); fi
+      done
+      docker run --rm \
+        --device=/dev/kfd --device=/dev/dri --group-add video \
+        --ipc=host --shm-size=16g \
+        -v "$$PWD/.devlab-src:/work" "$${mounts[@]}" \
+        -e VLLM_WORKER_MULTIPROC_METHOD=spawn \
+        -e PYTHONPATH=/work \
+        --entrypoint bash \
+        "$$image" \
+        -c 'set -e
+          python3 -c "import torch; print(torch.cuda.get_device_properties(0).gcnArchName)"
+          cd /work
+          uv pip install --system -q -r requirements/test/rocm.txt
+          uv pip install --system -q tests/vllm_test_utils
+          cd tests
+          python3 -m pytest -s -v evals/gpt_oss/test_gpqa_correctness.py --config-list-file=configs/models-spark.txt'
