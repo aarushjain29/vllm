@@ -1,16 +1,20 @@
-# DevLab gfx1201 (Navi4) mirror of the DGX Spark GPQA Eval (GPT-OSS) job
-# (amd-rocm/devlab).
+# DevLab gfx1151 (Strix Halo) and gfx1201 (Navi4) mirror of the DGX Spark
+# GPQA Eval (GPT-OSS) job (amd-rocm/devlab).
 #
-# DevLab Dispatch gives each job a fresh VM with Docker, so this is a plain
-# `docker run` step. It tests the ROCm nightly image, which is compiled for
-# every arch, with the tests from the commit that image was built from.
-# GPT-OSS's MXFP4 MoE runs on RDNA through the Triton W4A16 path.
+# DevLab Dispatch gives each job a fresh VM (gfx1201) or a cleaned bare-metal
+# host (gfx1151) with Docker, so this is a plain `docker run` step. It tests
+# the ROCm nightly image, which is compiled for every arch, with the tests from
+# the commit that image was built from. GPT-OSS's MXFP4 MoE runs on RDNA
+# through the Triton W4A16 path.
 #
 # Upload with: buildkite-agent pipeline upload .buildkite/devlab-amd.yaml
 steps:
-  - label: ":amd: (gfx1201) GPQA Eval (GPT-OSS)"
+  - label: ":amd: ({{matrix}}) GPQA Eval (GPT-OSS)"
     agents:
-      queue: amd_gfx1201
+      queue: "{{matrix}}"
+    matrix:
+      - amd_gfx1151
+      - amd_gfx1201
     timeout_in_minutes: 90
     command: |
       set -euo pipefail
