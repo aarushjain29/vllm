@@ -5,16 +5,23 @@
 # host (gfx1151) with Docker, so this is a plain `docker run` step. It tests
 # the ROCm nightly image, which is compiled for every arch, with the tests from
 # the commit that image was built from. GPT-OSS's MXFP4 MoE runs on RDNA
-# through the Triton W4A16 path.
+# through the Triton W4A16 path. Each arch runs with AITER off (the current
+# default) and on (the planned default), since AITER changes the RDNA4
+# attention backend.
 #
 # Upload with: buildkite-agent pipeline upload .buildkite/devlab-amd.yaml
 steps:
-  - label: ":amd: ({{matrix}}) GPQA Eval (GPT-OSS)"
+  - label: ":amd: ({{matrix.queue}}, AITER={{matrix.aiter}}) GPQA Eval (GPT-OSS)"
     agents:
-      queue: "{{matrix}}"
+      queue: "{{matrix.queue}}"
     matrix:
-      - amd_gfx1151
-      - amd_gfx1201
+      setup:
+        queue:
+          - amd_gfx1151
+          - amd_gfx1201
+        aiter:
+          - "0"
+          - "1"
     timeout_in_minutes: 90
     command: |
       set -euo pipefail
@@ -37,11 +44,14 @@ steps:
         --ipc=host --shm-size=16g \
         -v "$$PWD/.devlab-src:/work" "$${mounts[@]}" \
         -e VLLM_WORKER_MULTIPROC_METHOD=spawn \
+        -e VLLM_ROCM_USE_AITER={{matrix.aiter}} \
         -e PYTHONPATH=/work \
         --entrypoint bash \
         "$$image" \
         -c 'set -e
           python3 -c "import torch; print(torch.cuda.get_device_properties(0).gcnArchName)"
+          echo "RDNA AITER enabled:"
+          python3 -c "from vllm._aiter_ops import rocm_aiter_ops; print(rocm_aiter_ops.is_rdna_aiter_enabled())" || echo "check failed"
           cd /work
           uv pip install --system -q -r requirements/test/rocm.txt
           uv pip install --system -q tests/vllm_test_utils
