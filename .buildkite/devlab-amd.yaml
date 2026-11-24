@@ -1,0 +1,50 @@
+# DevLab gfx1151 (Strix Halo) and gfx1201 (Navi4) run of the aiter unified
+# attention tests (amd-rocm/devlab), the ROCm counterpart of the DGX Spark
+# FlashInfer XQA job.
+#
+# The tests come from this build's checkout, not from the nightly image's
+# commit, because they are not on main yet. The image is the ROCm nightly,
+# which is compiled for every arch. The tests select ROCM_AITER_UNIFIED_ATTN
+# directly, so VLLM_ROCM_USE_AITER does not change what they cover.
+# The sliding-window encoder tests are deselected: they need the gated
+# google/embeddinggemma-300m config.
+#
+# Upload with: buildkite-agent pipeline upload .buildkite/devlab-amd.yaml
+steps:
+  - label: ":amd: ({{matrix}}) aiter unified attention tests"
+    agents:
+      queue: "{{matrix}}"
+    matrix:
+      - amd_gfx1151
+      - amd_gfx1201
+    timeout_in_minutes: 60
+    command: |
+      set -euo pipefail
+      hostname
+      git log -1 --format='Tests from %H %s'
+      image=vllm/vllm-openai-rocm:nightly-rocm100
+      docker pull -q "$$image"
+      docker run --rm --entrypoint python3 "$$image" -c 'import vllm; print("Testing vllm", vllm.__version__)'
+      rm -rf .devlab-src && mkdir .devlab-src
+      git archive HEAD tests requirements pyproject.toml | tar -x -C .devlab-src
+      mounts=()
+      for f in /etc/pip.conf /etc/uv/uv.toml; do
+        if [ -f "$$f" ]; then mounts+=(-v "$$f:$$f:ro"); fi
+      done
+      docker run --rm \
+        --device=/dev/kfd --device=/dev/dri --group-add video \
+        --ipc=host --shm-size=16g \
+        -v "$$PWD/.devlab-src:/work" "$${mounts[@]}" \
+        -e PYTHONPATH=/work \
+        --entrypoint bash \
+        "$$image" \
+        -c 'set -e
+          python3 -c "import torch; print(torch.cuda.get_device_properties(0).gcnArchName)"
+          echo "aiter on RDNA:"
+          python3 -c "from vllm._aiter_ops import is_aiter_found_and_supported_on_rdna; print(is_aiter_found_and_supported_on_rdna())"
+          cd /work
+          uv pip install --system -q -r requirements/test/rocm.txt
+          uv pip install --system -q tests/vllm_test_utils
+          cd tests
+          python3 -m pytest -v -rs kernels/attention/test_rocm_aiter_unified_attn.py
+          python3 -m pytest -v -rs v1/attention/test_attention_backends.py -k "test_causal_backend_correctness or test_sliding_window_backend_correctness or test_rocm_aiter_unified_decode_correctness"'
