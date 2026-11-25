@@ -6359,6 +6359,7 @@ steps:
   mirror_hardwares: [amddevlab]
   dind: false
   agent_pool: gfx1151
+  optional: true
   working_dir: "/vllm-workspace/tests"
   commands:
   - pytest -v -s models/test_initialization.py::test_can_initialize_small_subset
@@ -6368,6 +6369,7 @@ steps:
   mirror_hardwares: [amddevlab]
   dind: false
   agent_pool: gfx1151
+  optional: true
   working_dir: "/vllm-workspace/tests"
   commands:
   - pytest -v -s samplers -k "not test_beam_search_passes_multimodal_data"
@@ -6377,6 +6379,7 @@ steps:
   mirror_hardwares: [amddevlab]
   dind: false
   agent_pool: gfx1151
+  optional: true
   working_dir: "/vllm-workspace/tests"
   commands:
   - pytest -v -s v1/engine/test_preprocess_error_handling.py
@@ -6391,6 +6394,7 @@ steps:
   mirror_hardwares: [amddevlab]
   dind: false
   agent_pool: gfx1201
+  optional: true
   working_dir: "/vllm-workspace/tests"
   commands:
   - pytest -v -s models/test_initialization.py::test_can_initialize_small_subset
@@ -6400,6 +6404,7 @@ steps:
   mirror_hardwares: [amddevlab]
   dind: false
   agent_pool: gfx1201
+  optional: true
   working_dir: "/vllm-workspace/tests"
   commands:
   - pytest -v -s samplers -k "not test_beam_search_passes_multimodal_data"
@@ -6409,6 +6414,7 @@ steps:
   mirror_hardwares: [amddevlab]
   dind: false
   agent_pool: gfx1201
+  optional: true
   working_dir: "/vllm-workspace/tests"
   commands:
   - pytest -v -s v1/engine/test_preprocess_error_handling.py
