@@ -1,0 +1,107 @@
+# DevLab gfx1151 (Strix Halo) and gfx1201 (Navi4) nightly (amd-rocm/devlab):
+# the DGX Spark GPQA Eval (GPT-OSS) mirror, with AITER off and on, and the aiter
+# unified attention tests, the ROCm counterpart of the DGX Spark FlashInfer XQA
+# job.
+#
+# Every job tests the ROCm nightly image, which is compiled for every arch,
+# with the tests from the commit that image was built from. The aiter
+# attention jobs also apply this branch's changes to the two aiter test files,
+# which are not on main yet. Those tests select ROCM_AITER_UNIFIED_ATTN
+# directly, so they do not run with AITER off and on. The sliding-window
+# encoder tests are deselected: they need the gated google/embeddinggemma-300m
+# config.
+#
+# Upload with: buildkite-agent pipeline upload .buildkite/devlab-amd.yaml
+steps:
+  - label: ":amd: ({{matrix.queue}}, AITER={{matrix.aiter}}) GPQA Eval (GPT-OSS)"
+    agents:
+      queue: "{{matrix.queue}}"
+    matrix:
+      setup:
+        queue:
+          - amd_gfx1151
+          - amd_gfx1201
+        aiter:
+          - "0"
+          - "1"
+    timeout_in_minutes: 90
+    command: |
+      set -euo pipefail
+      hostname
+      image=vllm/vllm-openai-rocm:nightly-rocm100
+      docker pull -q "$$image"
+      ver=$$(docker run --rm --entrypoint python3 "$$image" -c 'import vllm; print(vllm.__version__)')
+      short=$${ver##*+g}; short=$${short%%.*}
+      sha=$$(curl -fsSL -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/vllm-project/vllm/commits/$$short")
+      echo "Testing vllm $$ver (commit $$sha)"
+      git fetch -q --depth=1 https://github.com/vllm-project/vllm.git "$$sha"
+      rm -rf .devlab-src && mkdir .devlab-src
+      git archive FETCH_HEAD tests requirements pyproject.toml | tar -x -C .devlab-src
+      mounts=()
+      for f in /etc/pip.conf /etc/uv/uv.toml; do
+        if [ -f "$$f" ]; then mounts+=(-v "$$f:$$f:ro"); fi
+      done
+      docker run --rm \
+        --device=/dev/kfd --device=/dev/dri --group-add video \
+        --ipc=host --shm-size=16g \
+        -v "$$PWD/.devlab-src:/work" "$${mounts[@]}" \
+        -e VLLM_WORKER_MULTIPROC_METHOD=spawn \
+        -e VLLM_ROCM_USE_AITER={{matrix.aiter}} \
+        -e PYTHONPATH=/work \
+        --entrypoint bash \
+        "$$image" \
+        -c 'set -e
+          python3 -c "import torch; print(torch.cuda.get_device_properties(0).gcnArchName)"
+          echo "RDNA AITER enabled:"
+          python3 -c "from vllm._aiter_ops import rocm_aiter_ops; print(rocm_aiter_ops.is_rdna_aiter_enabled())" || echo "check failed"
+          cd /work
+          uv pip install --system -q -r requirements/test/rocm.txt
+          uv pip install --system -q tests/vllm_test_utils
+          cd tests
+          python3 -m pytest -s -v evals/gpt_oss/test_gpqa_correctness.py --config-list-file=configs/models-spark.txt'
+
+  - label: ":amd: ({{matrix}}) aiter unified attention tests"
+    agents:
+      queue: "{{matrix}}"
+    matrix:
+      - amd_gfx1151
+      - amd_gfx1201
+    timeout_in_minutes: 60
+    command: |
+      set -euo pipefail
+      hostname
+      image=vllm/vllm-openai-rocm:nightly-rocm100
+      docker pull -q "$$image"
+      ver=$$(docker run --rm --entrypoint python3 "$$image" -c 'import vllm; print(vllm.__version__)')
+      short=$${ver##*+g}; short=$${short%%.*}
+      sha=$$(curl -fsSL -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/vllm-project/vllm/commits/$$short")
+      echo "Testing vllm $$ver (commit $$sha)"
+      git fetch -q https://github.com/vllm-project/vllm.git "$$sha"
+      rm -rf .devlab-src && mkdir .devlab-src
+      git archive FETCH_HEAD tests requirements pyproject.toml | tar -x -C .devlab-src
+      aiter_tests=(tests/kernels/attention/test_rocm_aiter_unified_attn.py tests/v1/attention/test_attention_backends.py)
+      git diff "$$(git merge-base HEAD FETCH_HEAD)" HEAD -- "$${aiter_tests[@]}" > .devlab-aiter.patch
+      git apply --directory=.devlab-src .devlab-aiter.patch
+      echo "Applied this branch's aiter test changes:"
+      git diff --stat "$$(git merge-base HEAD FETCH_HEAD)" HEAD -- "$${aiter_tests[@]}"
+      mounts=()
+      for f in /etc/pip.conf /etc/uv/uv.toml; do
+        if [ -f "$$f" ]; then mounts+=(-v "$$f:$$f:ro"); fi
+      done
+      docker run --rm \
+        --device=/dev/kfd --device=/dev/dri --group-add video \
+        --ipc=host --shm-size=16g \
+        -v "$$PWD/.devlab-src:/work" "$${mounts[@]}" \
+        -e PYTHONPATH=/work \
+        --entrypoint bash \
+        "$$image" \
+        -c 'set -e
+          python3 -c "import torch; print(torch.cuda.get_device_properties(0).gcnArchName)"
+          echo "aiter on RDNA:"
+          python3 -c "from vllm._aiter_ops import is_aiter_found_and_supported_on_rdna; print(is_aiter_found_and_supported_on_rdna())"
+          cd /work
+          uv pip install --system -q -r requirements/test/rocm.txt
+          uv pip install --system -q tests/vllm_test_utils
+          cd tests
+          python3 -m pytest -v -rs kernels/attention/test_rocm_aiter_unified_attn.py
+          python3 -m pytest -v -rs v1/attention/test_attention_backends.py -k "test_causal_backend_correctness or test_sliding_window_backend_correctness or test_rocm_aiter_unified_decode_correctness"'
