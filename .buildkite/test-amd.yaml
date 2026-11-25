@@ -6418,3 +6418,70 @@ steps:
     --ignore v1/engine/test_preprocess_error_handling.py
   - pytest -v -s v1/test_tensor_ipc_queue.py
 
+- label: ":amd: (Strix Halo) GPQA Eval (GPT-OSS)"
+  timeout_in_minutes: 90
+  mirror_hardwares: [amddevlab]
+  dind: false
+  agent_pool: gfx1151
+  optional: true
+  working_dir: "/vllm-workspace/tests"
+  commands:
+  - pytest -s -v evals/gpt_oss/test_gpqa_correctness.py --config-list-file=configs/models-spark.txt
+
+- label: ":amd: (Strix Halo) GPQA Eval (GPT-OSS) (AITER)"
+  timeout_in_minutes: 90
+  mirror_hardwares: [amddevlab]
+  dind: false
+  agent_pool: gfx1151
+  optional: true
+  working_dir: "/vllm-workspace/tests"
+  commands:
+  - VLLM_ROCM_USE_AITER=1 pytest -s -v evals/gpt_oss/test_gpqa_correctness.py --config-list-file=configs/models-spark.txt
+
+- label: ":amd: (Strix Halo) Attention AITER Unified"
+  timeout_in_minutes: 60
+  mirror_hardwares: [amddevlab]
+  dind: false
+  agent_pool: gfx1151
+  optional: true
+  working_dir: "/vllm-workspace/tests"
+  commands:
+  - pytest -v -s kernels/attention/test_rocm_aiter_unified_attn.py
+  - >-
+    pytest -v -s
+    v1/attention/test_attention_backends.py
+    -k "test_causal_backend_correctness or test_sliding_window_backend_correctness or test_rocm_aiter_unified_decode_correctness"
+
+- label: ":amd: (R9700) GPQA Eval (GPT-OSS)"
+  timeout_in_minutes: 90
+  mirror_hardwares: [amddevlab]
+  dind: false
+  agent_pool: gfx1201
+  optional: true
+  working_dir: "/vllm-workspace/tests"
+  commands:
+  - pytest -s -v evals/gpt_oss/test_gpqa_correctness.py --config-list-file=configs/models-spark.txt
+
+- label: ":amd: (R9700) GPQA Eval (GPT-OSS) (AITER)"
+  timeout_in_minutes: 90
+  mirror_hardwares: [amddevlab]
+  dind: false
+  agent_pool: gfx1201
+  optional: true
+  working_dir: "/vllm-workspace/tests"
+  commands:
+  - VLLM_ROCM_USE_AITER=1 pytest -s -v evals/gpt_oss/test_gpqa_correctness.py --config-list-file=configs/models-spark.txt
+
+- label: ":amd: (R9700) Attention AITER Unified"
+  timeout_in_minutes: 60
+  mirror_hardwares: [amddevlab]
+  dind: false
+  agent_pool: gfx1201
+  optional: true
+  working_dir: "/vllm-workspace/tests"
+  commands:
+  - pytest -v -s kernels/attention/test_rocm_aiter_unified_attn.py
+  - >-
+    pytest -v -s
+    v1/attention/test_attention_backends.py
+    -k "test_causal_backend_correctness or test_sliding_window_backend_correctness or test_rocm_aiter_unified_decode_correctness"
